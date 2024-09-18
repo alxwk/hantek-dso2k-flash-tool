@@ -7,11 +7,11 @@ extern "C" {
 
 #include <fel.h>
 
-int spinand_detect(struct xfel_ctx_t * ctx, char * name, uint64_t * capacity);
-int spinand_erase(struct xfel_ctx_t * ctx, uint64_t addr, uint64_t len);
-int spinand_read(struct xfel_ctx_t * ctx, uint64_t addr, void * buf, uint64_t len);
-int spinand_write(struct xfel_ctx_t * ctx, uint64_t addr, void * buf, uint64_t len);
-int spinand_splwrite(struct xfel_ctx_t * ctx, uint32_t splitsz, uint64_t addr, void * buf, uint64_t len);
+int dso2d_dump(struct xfel_ctx_t * ctx, void *buf);
+int spinand_detect(struct xfel_ctx_t * ctx, char * name, size_t * capacity);
+int dso2d_restore(struct xfel_ctx_t * ctx, void * buf);
+int dso2d_erase(struct xfel_ctx_t * ctx);
+int dso2d_dump_regs(struct xfel_ctx_t * ctx);
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,15 @@
 #include <fel.h>
 
+#define SDRAM_ADDR          (0x80000000UL)              // SDRAM base address
+
+#define SDRAM_CMDBUF        (SDRAM_ADDR)                // cmd buffer address
+#define SDRAM_CMDBUF_SZ     (1024U*1024)                // cmd buffer size (1MB)
+
+#define SDRAM_DATABUF       (SDRAM_ADDR+SDRAM_CMDBUF_SZ)// data buffer address
+#define SDRAM_DATABUF_SZ    (63U*1024*1024)             // dat buffer size(63MB)
+
+static uint8_t sdram_initialized;
+
 static int chip_detect(struct xfel_ctx_t * ctx, uint32_t id)
 {
 	if(id == 0x00166300)
@@ -414,17 +424,20 @@ static int chip_ddr(struct xfel_ctx_t * ctx, const char * type)
 		0xcc, 0xcc, 0x40, 0xc4
 	};
 	fel_write(ctx, 0x00008800, (void *)&payload[0], sizeof(payload));
-	fel_exec(ctx, 0x00008800);
+	fel_exec(ctx, 0x00008800);    
+    usleep(100000);                                                                 // Wait 100ms for sdram init in SoC (Otherwise it might cause USB bulk error)
+    sdram_initialized=1;
 	return 1;
 }
 
 static int chip_spi_init(struct xfel_ctx_t * ctx, uint32_t * swapbuf, uint32_t * swaplen, uint32_t * cmdlen)
 {
-	static const uint8_t payload[] = {
+	static const uint8_t payload[] = {    
 		0xff, 0xff, 0xff, 0xea, 0x40, 0x00, 0xa0, 0xe3, 0x00, 0xd0, 0x80, 0xe5,
 		0x04, 0xe0, 0x80, 0xe5, 0x00, 0xe0, 0x0f, 0xe1, 0x08, 0xe0, 0x80, 0xe5,
 		0x10, 0xef, 0x11, 0xee, 0x0c, 0xe0, 0x80, 0xe5, 0x10, 0xef, 0x11, 0xee,
-		0x10, 0xe0, 0x80, 0xe5, 0x26, 0x0b, 0xa0, 0xe3, 0x85, 0x00, 0x00, 0xeb,
+     // 0x10, 0xe0, 0x80, 0xe5, 0x26, 0x0b, 0xa0, 0xe3, 0x8b, 0x00, 0x00, 0xeb,     // Original, executing cmdbuf at 0x9800
+		0x10, 0xe0, 0x80, 0xe5, 0x02, 0x01, 0xa0, 0xe3, 0x85, 0x00, 0x00, 0xeb,     // Change cmdbuf address to SDRAM base (0x80000000) to allow much larger queues
 		0x04, 0x00, 0xa0, 0xe3, 0x65, 0x10, 0xa0, 0xe3, 0x00, 0x10, 0xc0, 0xe5,
 		0x47, 0x10, 0xa0, 0xe3, 0x01, 0x10, 0xc0, 0xe5, 0x4f, 0x10, 0xa0, 0xe3,
 		0x02, 0x10, 0xc0, 0xe5, 0x4e, 0x10, 0xa0, 0xe3, 0x03, 0x10, 0xc0, 0xe5,
@@ -521,22 +534,28 @@ static int chip_spi_init(struct xfel_ctx_t * ctx, uint32_t * swapbuf, uint32_t *
 		0x01, 0x00, 0x13, 0xe3, 0xf6, 0xff, 0xff, 0x1a, 0x04, 0x60, 0xa0, 0xe1,
 		0x8f, 0xff, 0xff, 0xea, 0x14, 0xd0, 0x8d, 0xe2, 0xf0, 0x83, 0xbd, 0xe8,
 		0x0f, 0xc0, 0xff, 0xff, 0x00, 0x50, 0xc0, 0x01, 0x00, 0x00, 0xc2, 0x01,
-		0x01, 0x10, 0x00, 0x00
-	};
-	fel_write(ctx, 0x00008800, (void *)&payload[0], sizeof(payload));
+		0x01, 0x10, 0x00, 0x00	
+    };
+    if(!sdram_initialized)
+    {
+        chip_ddr(ctx, "");                                                              // Init sdram required, the payload was modified to use buffer in SDRAM
+    }
+    
+	fel_write(ctx, 0x00008800, (void *)&payload[0], sizeof(payload));                   // 0x8800 is the payload address
+    
 	if(swapbuf)
-		*swapbuf = 0x0000a800;
+		*swapbuf = SDRAM_DATABUF;
 	if(swaplen)
-		*swaplen = 3584;
+		*swaplen = SDRAM_DATABUF_SZ;
 	if(cmdlen)
-		*cmdlen = 4096;
+		*cmdlen = SDRAM_CMDBUF_SZ;
 	return 1;
 }
 
 static int chip_spi_run(struct xfel_ctx_t * ctx, uint8_t * cbuf, uint32_t clen)
 {
-	fel_write(ctx, 0x00009800, (void *)cbuf, clen);
-	fel_exec(ctx, 0x00008800);
+	fel_write(ctx, SDRAM_CMDBUF, (void *)cbuf, clen);                                   // Write SPI cmd buf into SDRAM buffer
+	fel_exec(ctx, 0x00008800);                                                          // Execute SPI payload (Previously loaded to 0x8800)
 	return 1;
 }
 

@@ -1,53 +1,9 @@
 #include <fel.h>
 
-extern struct chip_t a10;
-extern struct chip_t a13_a10s_r8;
-extern struct chip_t a20;
-extern struct chip_t a23;
-extern struct chip_t a31;
-extern struct chip_t a33_r16;
-extern struct chip_t a40i_r40;
-extern struct chip_t a64;
-extern struct chip_t a80;
-extern struct chip_t a83t;
-extern struct chip_t d1_f133;
 extern struct chip_t f1c100s_f1c200s_f1c500s;
-extern struct chip_t h2_h3;
-extern struct chip_t h5;
-extern struct chip_t h6;
-extern struct chip_t h616;
-extern struct chip_t r328;
-extern struct chip_t r329;
-extern struct chip_t r528_t113;
-extern struct chip_t t507;
-extern struct chip_t v3s_s3;
-extern struct chip_t v536;
-extern struct chip_t v831;
 
 static struct chip_t * chips[] = {
-	&a10,
-	&a13_a10s_r8,
-	&a20,
-	&a23,
-	&a31,
-	&a33_r16,
-	&a40i_r40,
-	&a64,
-	&a80,
-	&a83t,
-	&d1_f133,
 	&f1c100s_f1c200s_f1c500s,
-	&h2_h3,
-	&h5,
-	&h6,
-	&h616,
-	&r328,
-	&r329,
-	&r528_t113,
-	&t507,
-	&v3s_s3,
-	&v536,
-	&v831,
 };
 
 struct usb_request_t {

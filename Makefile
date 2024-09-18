@@ -13,9 +13,9 @@ OC			:= $(CROSS)objcopy
 OD			:= $(CROSS)objdump
 RM			:= rm -fr
 
-ASFLAGS		:= -g -ggdb -Wall -O3
-CFLAGS		:= -g -ggdb -Wall -O3
-CXXFLAGS	:= -g -ggdb -Wall -O3
+ASFLAGS		:= -g -ggdb -Wall -O2
+CFLAGS		:= -g -ggdb -Wall -O2
+CXXFLAGS	:= -g -ggdb -Wall -O2
 LDFLAGS		:=
 ARFLAGS		:= -rcs
 OCFLAGS		:= -v -O binary
@@ -23,9 +23,9 @@ ODFLAGS		:=
 MCFLAGS		:=
 
 LIBDIRS		:=
-LIBS 		:= `pkg-config --libs libusb-1.0`
+LIBS 		:= -L". /usr/local/lib /usr/i686-w64-mingw32/lib" -lusb-1.0
 
-INCDIRS		:= -I . `pkg-config --cflags libusb-1.0`
+INCDIRS		:= -I". /usr/include/libusb-1.0 /usr/i686-w64-mingw32/include/libusb-1.0"
 SRCDIRS		:= . chips
 
 
@@ -44,7 +44,7 @@ CPPOBJS		:= $(patsubst %, %, $(CPPFILES:.cpp=.o))
 OBJS		:= $(SOBJS) $(COBJS) $(CPPOBJS)
 
 OBJDIRS		:= $(patsubst %, %, $(SRCDIRS))
-NAME		:= xfel
+NAME		:= dsoflash
 VPATH		:= $(OBJDIRS)
 
 .PHONY:		all install clean
@@ -68,9 +68,9 @@ $(CPPOBJS) : %.o : %.cpp
 	@$(CXX) $(CXXFLAGS) -MD -MP -MF $@.d $(INCDIRS) -c $< -o $@
 
 install:
-	install -Dm0755 xfel /usr/local/bin/xfel
-	install -Dm0644 99-xfel.rules /etc/udev/rules.d/99-xfel.rules
-	install -Dm0644 LICENSE /usr/share/licenses/xfel/LICENSE
+	install -Dm0755 dsoflash /usr/local/bin/dsoflash
+	install -Dm0644 99-dsoflash.rules /etc/udev/rules.d/99-dsoflash.rules
+	install -Dm0644 LICENSE /usr/share/licenses/dsoflash/LICENSE
 	udevadm control --reload
 
 clean:

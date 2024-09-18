@@ -1,422 +1,293 @@
 #include <fel.h>
-#include <spinor.h>
 #include <spinand.h>
+#include <md5.h>
+#include <time.h>
 
-static uint64_t file_save(const char * filename, void * buf, uint64_t len)
-{
-	FILE * out = fopen(filename, "wb");
-	int r;
-	if(!out)
-	{
-		perror("Failed to open output file");
-		exit(-1);
-	}
-	r = fwrite(buf, len, 1, out);
-	fclose(out);
-	return r;
+
+static struct xfel_ctx_t ctx;
+static char Name[128];
+static size_t capacity, read_bytes; 
+static char *flashbf, *filebf;
+static char filename[128];           
+static char ext[16];
+static char * dot;
+static time_t start;
+
+static int terminal_error(void){
+    if(ctx.hdl){
+        libusb_close(ctx.hdl);   
+    }
+    libusb_exit(NULL);     
+    if(flashbf){ free(flashbf); }
+    if(filebf) { free(filebf); }
+    exit(-1);  
+}
+static uint32_t file_save(const char * filename, void * buf, uint32_t len){
+    FILE * out = fopen(filename, "wb");
+    uint32_t r;
+    if(!out){ return 0; }
+    r = fwrite(buf, len, 1, out);
+    fclose(out);
+    return r;
 }
 
-static void * file_load(const char * filename, uint64_t * len)
+static void * file_load(const char * filename, uint32_t * len)
 {
-	uint64_t offset = 0, bufsize = 8192;
-	char * buf = malloc(bufsize);
-	FILE * in;
-	if(strcmp(filename, "-") == 0)
-		in = stdin;
-	else
-		in = fopen(filename, "rb");
-	if(!in)
-	{
-		perror("Failed to open input file");
-		exit(-1);
-	}
-	while(1)
-	{
-		uint64_t len = bufsize - offset;
-		uint64_t n = fread(buf + offset, 1, len, in);
-		offset += n;
-		if(n < len)
-			break;
-		bufsize *= 2;
-		buf = realloc(buf, bufsize);
-		if(!buf)
-		{
-			perror("Failed to resize load_file() buffer");
-			exit(-1);
-		}
-	}
-	if(len)
-		*len = offset;
-	if(in != stdin)
-		fclose(in);
-	return buf;
+    uint32_t size, n;
+    FILE * in;
+    char * buf;
+    in = fopen(filename, "rb");
+    
+    fseek(in, 0, SEEK_END);       // seek to end of file
+    size = ftell(in);             // get current file pointer
+    fseek(in, 0, SEEK_SET);       // seek back to beginning of file  
+    buf = malloc(size);        // allocate size
+    if(!buf){
+        //printf("Unable to allocate file buffer!\r\n");
+        return NULL;
+    }
+    n = fread(buf, 1, size, in);  // Read whole file  
+    if(n < size){                 // Ensure it was completely read
+        free(buf);
+        return NULL;
+    }  
+    if(len) { *len = n; }  
+    if(in != stdin) { fclose(in); }
+    return buf;
 }
 
-static void hexdump(uint32_t addr, void * buf, size_t len)
-{
-	unsigned char * p = buf;
-	size_t i, j;
 
-	for(j = 0; j < len; j += 16)
-	{
-		printf("%08x: ", (uint32_t)(addr + j));
-		for(i = 0; i < 16; i++)
-		{
-			if(j + i < len)
-				printf("%02x ", p[j + i]);
-			else
-				printf("   ");
-		}
-		putchar(' ');
-		for(i = 0; i < 16; i++)
-		{
-			if(j + i >= len)
-				putchar(' ');
-			else
-				putchar(isprint(p[j + i]) ? p[j + i] : '.');
-		}
-		printf("\r\n");
-	}
+static void usage(void){
+    printf("\r\nHantek DSO2D1x flash utility v0.36\r\n");
+    printf("Compiled: %s\r\n", __DATE__);
+    printf("Based on xfel v1.2.6 - https://github.com/xboot/xfel\r\n");
+    printf("Usage:\r\n");
+    printf("    dsoflash -h or --help                         - Show this screen\r\n");
+    printf("    dsoflash ver                                  - Get chip version\r\n");
+    printf("    dsoflash detect                               - Detect flash\r\n");
+    printf("    dsoflash status                               - Get flash status regs\r\n");
+    printf("    dsoflash reset                                - Restart device\r\n");
+    printf("    dsoflash read <file>                          - Dump flash to file\r\n");
+    printf("    dsoflash write <file>                         - Restore flash from file\r\n");
+    printf("    dsoflash erase                                - Erase flash\r\n\n");
+    printf("Warning: Commands will be executed inmediately, without confirmation!\r\n");
 }
 
-static void usage(void)
-{
-	printf("xfel(v1.2.6) - https://github.com/xboot/xfel\r\n");
-	printf("usage:\r\n");
-	printf("    xfel version                                        - Show chip version\r\n");
-	printf("    xfel hexdump <address> <length>                     - Dumps memory region in hex\r\n");
-	printf("    xfel dump <address> <length>                        - Binary memory dump to stdout\r\n");
-	printf("    xfel exec <address>                                 - Call function address\r\n");
-	printf("    xfel read32 <address>                               - Read 32-bits value from device memory\r\n");
-	printf("    xfel write32 <address> <value>                      - Write 32-bits value to device memory\r\n");
-	printf("    xfel read <address> <length> <file>                 - Read memory to file\r\n");
-	printf("    xfel write <address> <file>                         - Write file to memory\r\n");
-	printf("    xfel reset                                          - Reset device using watchdog\r\n");
-	printf("    xfel sid                                            - Show sid information\r\n");
-	printf("    xfel jtag                                           - Enable jtag debug\r\n");
-	printf("    xfel ddr [type]                                     - Initial ddr controller with optional type\r\n");
-	printf("    xfel spinor                                         - Detect spi nor flash\r\n");
-	printf("    xfel spinor erase <address> <length>                - Erase spi nor flash\r\n");
-	printf("    xfel spinor read <address> <length> <file>          - Read spi nor flash to file\r\n");
-	printf("    xfel spinor write <address> <file>                  - Write file to spi nor flash\r\n");
-	printf("    xfel spinand                                        - Detect spi nand flash\r\n");
-	printf("    xfel spinand erase <address> <length>               - Erase spi nand flash\r\n");
-	printf("    xfel spinand read <address> <length> <file>         - Read spi nand flash to file\r\n");
-	printf("    xfel spinand write <address> <file>                 - Write file to spi nand flash\r\n");
-	printf("    xfel spinand splwrite <split-size> <address> <file> - Write file to spi nand flash with split support\r\n");
+static int init_system(void){
+    int init=0;
+    
+    printf("\r\nConfiguring USB to HS mode... ");
+    ctx.chip->write32(&ctx, 0x01c13040, 0x29860);    
+    libusb_close(ctx.hdl);                                                  // Close USB
+    
+    for(int i=0; i<10; i++){                                                 // Try for 10 seconds
+        sleep(1);                                                           // Wait 1 seconds for USB reenumeration    
+        ctx.hdl = libusb_open_device_with_vid_pid(NULL, 0x1f3a, 0xefe8);    // Open USB device
+        if(ctx.hdl){                                                        // If sucessfull
+            init = fel_init(&ctx);                                          // Try initialization
+            if(init){ break; }                                              // Break on success
+            libusb_close(ctx.hdl);                                          // Otherwise close handler and retry
+        }
+    }
+    
+    if(!init){
+        printf("ERROR: No FEL device found\r\n");
+        return -1;
+    }
+    else{
+         printf("OK\r\n");
+    }
+    
+    if(!spinand_detect(&ctx, Name, &capacity)){
+        terminal_error();
+        printf("Unknown flash memory!\r\n");
+        return 1;
+    }
+    printf("Flash found: '%s'  Size: %zu MB\r\n\n", Name, capacity/((size_t)1024*1024));
+    return 0;
 }
 
-int main(int argc, char * argv[])
-{
-	struct xfel_ctx_t ctx;
+void compute_md5(char * data, uint32_t len, char * digest){
+    struct UL_MD5Context md5_ctx;    
+    unsigned char d[UL_MD5LENGTH];
+    
+    ul_MD5Init(&md5_ctx);
+    ul_MD5Update(&md5_ctx, (uint8_t*)data, len);
+    ul_MD5Final(d, &md5_ctx);
+    sprintf(digest, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+            d[0],d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15]);
+            
+    digest[32] = 0;
+}
+    
+void process_filename(char * s){
+    strcpy(filename, s);
+    dot = strrchr(filename, '.');
+    if(!dot){
+        dot = &filename[strlen(filename)];
+        strcpy(dot, ".bin");
+    }
+    strcpy(ext, dot);
+}    
+void show_elapsed(void){
+    char time_str[100];
+    time_t elapsed = time(0) - start;
+    strftime(time_str, sizeof(time_str) - 1, "Elapsed time: %M:%S\r\n", gmtime(&elapsed));
+    printf("%s\n", time_str);
+}
 
-	if(argc < 2)
-	{
-		usage();
-		return 0;
+int main(int argc, char * argv[]){    
+    if(argc < 2)
+    {
+        usage();
+        return 0;
+    }  
+    argc --;
+    argv ++;
+    for(int i = 1; i < argc; i++){
+        if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
+            usage();
+            return 0;
+        }
+    }
+    libusb_init(NULL);  
+    ctx.hdl = libusb_open_device_with_vid_pid(NULL, 0x1f3a, 0xefe8);
+    if(ctx.hdl == NULL){        
+        printf("ERROR: No USB device found\r\n");
+        libusb_exit(NULL);
+        return -1;
+    }
+    if(!fel_init(&ctx)){
+        printf("ERROR: No FEL device found\r\n");
+        libusb_exit(NULL);
+        return -1;
+    }   
+    if(!strcmp(argv[0], "ver")){
+        printf("%.8s ID=0x%08x(%s) dflag=0x%02x dlength=0x%02x scratchpad=0x%08x\r\n",
+            ctx.version.magic, ctx.version.id, ctx.chip->name, ctx.version.dflag,
+            ctx.version.dlength, ctx.version.scratchpad);
+    }
+    else if(!strcmp(argv[0], "detect") && (argc == 1)){
+        init_system();
+    }  
+    else if(!strcmp(argv[0], "status") && (argc == 1)){
+        dso2d_dump_regs(&ctx);
+    }    
+	else if(!strcmp(argv[0], "reset")){
+		fel_chip_reset(&ctx);
 	}
-	for(int i = 1; i < argc; i++)
-	{
-		if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help"))
-		{
-			usage();
-			return 0;
-		}
-	}
-
-	libusb_init(NULL);
-	ctx.hdl = libusb_open_device_with_vid_pid(NULL, 0x1f3a, 0xefe8);
-	if(!fel_init(&ctx))
-	{
-		printf("ERROR: Can't found any FEL device\r\n");
-		if(ctx.hdl)
-			libusb_close(ctx.hdl);
-		libusb_exit(NULL);
-		return -1;
-	}
-	if(!strcmp(argv[1], "version"))
-	{
-		printf("%.8s ID=0x%08x(%s) dflag=0x%02x dlength=0x%02x scratchpad=0x%08x\r\n",
-			ctx.version.magic, ctx.version.id, ctx.chip->name, ctx.version.dflag,
-			ctx.version.dlength, ctx.version.scratchpad);
-	}
-	else if(!strcmp(argv[1], "hexdump"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 2)
-		{
-			uint32_t addr = strtoul(argv[0], NULL, 0);
-			size_t len = strtoul(argv[1], NULL, 0);
-			char * buf = malloc(len);
-			if(buf)
-			{
-				fel_read(&ctx, addr, buf, len);
-				hexdump(addr, buf, len);
-				free(buf);
-			}
-		}
-		else
-			usage();
-	}
-	else if(!strcmp(argv[1], "dump"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 2)
-		{
-			uint32_t addr = strtoul(argv[0], NULL, 0);
-			size_t len = strtoul(argv[1], NULL, 0);
-			char * buf = malloc(len);
-			if(buf)
-			{
-				fel_read(&ctx, addr, buf, len);
-				fwrite(buf, len, 1, stdout);
-				free(buf);
-			}
-		}
-		else
-			usage();
-	}
-	else if(!strcmp(argv[1], "exec"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 1)
-		{
-			uint32_t addr = strtoul(argv[0], NULL, 0);
-			fel_exec(&ctx, addr);
-		}
-		else
-			usage();
-	}
-	else if(!strcmp(argv[1], "read32"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 1)
-		{
-			uint32_t addr = strtoul(argv[0], NULL, 0);
-			printf("0x%08x\r\n", fel_read32(&ctx, addr));
-		}
-		else
-			usage();
-	}
-	else if(!strcmp(argv[1], "write32"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 2)
-		{
-			uint32_t addr = strtoul(argv[0], NULL, 0);
-			size_t val = strtoul(argv[1], NULL, 0);
-			fel_write32(&ctx, addr, val);
-		}
-		else
-			usage();
-	}
-	else if(!strcmp(argv[1], "read"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 3)
-		{
-			uint32_t addr = strtoul(argv[0], NULL, 0);
-			size_t len = strtoul(argv[1], NULL, 0);
-			char * buf = malloc(len);
-			if(buf)
-			{
-				fel_read_progress(&ctx, addr, buf, len);
-				file_save(argv[2], buf, len);
-				free(buf);
-			}
-		}
-		else
-			usage();
-	}
-	else if(!strcmp(argv[1], "write"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 2)
-		{
-			uint32_t addr = strtoul(argv[0], NULL, 0);
-			uint64_t len;
-			void * buf = file_load(argv[1], &len);
-			if(buf)
-			{
-				fel_write_progress(&ctx, addr, buf, len);
-				free(buf);
-			}
-		}
-		else
-			usage();
-	}
-	else if(!strcmp(argv[1], "reset"))
-	{
-		if(!fel_chip_reset(&ctx))
-			printf("The '%s' chip don't support reset command\r\n", ctx.chip->name);
-	}
-	else if(!strcmp(argv[1], "sid"))
-	{
-		char sid[256];
-		if(fel_chip_sid(&ctx, sid))
-			printf("%s\r\n", sid);
-		else
-			printf("The '%s' chip don't support sid command\r\n", ctx.chip->name);
-	}
-	else if(!strcmp(argv[1], "jtag"))
-	{
-		if(!fel_chip_jtag(&ctx))
-			printf("The '%s' chip don't support jtag command\r\n", ctx.chip->name);
-	}
-	else if(!strcmp(argv[1], "ddr"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(fel_chip_ddr(&ctx, (argc == 1) ? argv[0] : ""))
-			printf("Initial ddr controller succeeded\r\n");
-		else
-			printf("Failed to initial ddr controller\r\n");
-	}
-	else if(!strcmp(argv[1], "spinor"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 0)
-		{
-			char name[128];
-			uint64_t capacity;
-
-			if(spinor_detect(&ctx, name, &capacity))
-				printf("Found spi nor flash '%s' with %lld bytes\r\n", name, (long long)capacity);
-			else
-				printf("Can't detect any spi nor flash\r\n");
-		}
-		else
-		{
-			if(!strcmp(argv[0], "erase") && (argc == 3))
-			{
-				argc -= 1;
-				argv += 1;
-				uint64_t addr = strtoull(argv[0], NULL, 0);
-				uint64_t len = strtoull(argv[1], NULL, 0);
-				if(!spinor_erase(&ctx, addr, len))
-					printf("Can't erase spi nor flash\r\n");
-			}
-			else if(!strcmp(argv[0], "read") && (argc == 4))
-			{
-				argc -= 1;
-				argv += 1;
-				uint64_t addr = strtoull(argv[0], NULL, 0);
-				uint64_t len = strtoull(argv[1], NULL, 0);
-				char * buf = malloc(len);
-				if(buf)
-				{
-					if(spinor_read(&ctx, addr, buf, len))
-						file_save(argv[2], buf, len);
-					else
-						printf("Can't read spi nor flash\r\n");
-					free(buf);
-				}
-			}
-			else if(!strcmp(argv[0], "write") && (argc == 3))
-			{
-				argc -= 1;
-				argv += 1;
-				uint64_t addr = strtoull(argv[0], NULL, 0);
-				uint64_t len;
-				void * buf = file_load(argv[1], &len);
-				if(buf)
-				{
-					if(!spinor_write(&ctx, addr, buf, len))
-						printf("Can't write spi nor flash\r\n");
-					free(buf);
-				}
-			}
-			else
-				usage();
-		}
-	}
-	else if(!strcmp(argv[1], "spinand"))
-	{
-		argc -= 2;
-		argv += 2;
-		if(argc == 0)
-		{
-			char name[128];
-			uint64_t capacity;
-
-			if(spinand_detect(&ctx, name, &capacity))
-				printf("Found spi nand flash '%s' with %lld bytes\r\n", name, (long long)capacity);
-			else
-				printf("Can't detect any spi nand flash\r\n");
-		}
-		else
-		{
-			if(!strcmp(argv[0], "erase") && (argc == 3))
-			{
-				argc -= 1;
-				argv += 1;
-				uint64_t addr = strtoull(argv[0], NULL, 0);
-				uint64_t len = strtoull(argv[1], NULL, 0);
-				if(!spinand_erase(&ctx, addr, len))
-					printf("Can't erase spi nand flash\r\n");
-			}
-			else if(!strcmp(argv[0], "read") && (argc == 4))
-			{
-				argc -= 1;
-				argv += 1;
-				uint64_t addr = strtoull(argv[0], NULL, 0);
-				uint64_t len = strtoull(argv[1], NULL, 0);
-				char * buf = malloc(len);
-				if(buf)
-				{
-					if(spinand_read(&ctx, addr, buf, len))
-						file_save(argv[2], buf, len);
-					else
-						printf("Can't read spi nand flash\r\n");
-					free(buf);
-				}
-			}
-			else if(!strcmp(argv[0], "write") && (argc == 3))
-			{
-				argc -= 1;
-				argv += 1;
-				uint64_t addr = strtoull(argv[0], NULL, 0);
-				uint64_t len;
-				void * buf = file_load(argv[1], &len);
-				if(buf)
-				{
-					if(!spinand_write(&ctx, addr, buf, len))
-						printf("Can't write spi nand flash\r\n");
-					free(buf);
-				}
-			}
-			else if(!strcmp(argv[0], "splwrite") && (argc == 4))
-			{
-				argc -= 1;
-				argv += 1;
-				uint32_t splitsz = strtoul(argv[0], NULL, 0);
-				uint64_t addr = strtoull(argv[1], NULL, 0);
-				uint64_t len;
-				void * buf = file_load(argv[2], &len);
-				if(buf)
-				{
-					if(!spinand_splwrite(&ctx, splitsz, addr, buf, len))
-						printf("Can't write spi nand flash with split support\r\n");
-					free(buf);
-				}
-			}
-			else
-				usage();
-		}
-	}
-	else
-		usage();
-	if(ctx.hdl)
-		libusb_close(ctx.hdl);
-	libusb_exit(NULL);
-
-	return 0;
+    else if(!strcmp(argv[0], "erase") && (argc == 1)){
+        dso2d_erase(&ctx);
+    }
+    else if(!strcmp(argv[0], "read") && (argc == 2)){
+        init_system();
+        process_filename(argv[1]);
+        flashbf = malloc(capacity);
+        if(!flashbf){
+            printf("Unable to allocate flash buffer!\r\n");
+            terminal_error();        
+        }        
+        start = time(0);
+        dso2d_dump(&ctx, flashbf);
+        if(!file_save(filename, flashbf, capacity)){
+            printf("Unable to write to file %s!\r\n", filename);
+            terminal_error();              
+        }
+        else{
+            char data_md5[33];   
+            printf("\nFlash saved to %s\r\n", filename);
+            strcpy(dot, ".md5");
+            compute_md5(flashbf, capacity, data_md5);            
+            if(!file_save(filename, data_md5, sizeof(data_md5))){
+                printf("Unable to write file %s!\r\n\nMD5: %s\r\n", filename, data_md5);
+            }
+            else{
+                printf("%s\r\n\nMD5: %s\r\n", filename, data_md5);
+            }
+            show_elapsed();
+            free(flashbf);            
+        }
+    }
+    else if(!strcmp(argv[0], "write") && (argc == 2)){       
+        init_system();
+        
+        char data_md5[33];          
+        process_filename(argv[1]);        
+        strcpy(dot, ".md5");        
+        char * file_md5 = file_load(filename, &read_bytes);
+        if(file_md5 != NULL && read_bytes != 33){
+            printf("Bad MD5 filesize, must be 33 Bytes!\r\n");
+            terminal_error();      
+        }
+        
+        filebf = file_load(argv[1], &read_bytes);                 
+        if(!filebf){
+            printf("Unable to read from file %s!\r\n", argv[1]);
+            terminal_error();      
+        }
+        
+        compute_md5(filebf, capacity, data_md5);   
+        
+        if (read_bytes != capacity){                           // capacity not matching flash size
+            size_t spare;                             // Check  if filesize matches data+spare
+            if(read_bytes==((size_t)132*1024*1024)){                 // 64 byte spare area
+                spare=64;
+            }
+            else if(read_bytes==((size_t)136*1024*1024)){            // 128 byte spare area
+                spare=128;
+            }
+            else if(read_bytes==((size_t)144*1024*1024)){            // 256 byte spare area
+                spare=256;
+            }
+            else{
+                printf("File doesn't match the flash size\r\n");
+                printf(" Flash: %zu Bytes,   File: %zu Bytes\r\n", read_bytes, capacity);
+                terminal_error();
+            }
+            
+            printf("Old backup detected, spare area: %zuBytes\r\n\n", spare);
+            
+            char * tmp = malloc(read_bytes);                      // Temporal buffer
+            if(tmp==NULL){                
+                printf("Unable to allocate flash buffer!\r\n");
+                terminal_error();      
+            }
+            char *in=filebf, *out=tmp;
+            for(size_t i=0; i<read_bytes; i+=(2048+spare)){         // Extract data
+                memcpy(out, in, 2048);
+                in+=2048+spare;
+                out+=2048;
+            }
+            memcpy(filebf,tmp,capacity);                        // Copy data
+            free(tmp);
+        }
+        
+        if(!file_md5){
+            printf("MD5: %s\r\nFile %s not found, skipping md5 check\r\n", data_md5, filename);
+        }
+        else if(strcmp(data_md5, file_md5) != 0){
+            printf("MD5 mismatch! Aborting...\r\n\n%s: %s\r\nComputed: %s\r\n\n", filename, file_md5, data_md5);
+            printf("You might delete or rename the md5 file to skip md5 check\r\n");
+            terminal_error();
+        }
+        else{
+            printf("MD5 OK: %s\r\n", data_md5);
+        }
+        if(file_md5){
+            free(file_md5);
+        }
+          
+        start = time(0);     
+        dso2d_restore(&ctx, filebf);        
+        printf("\nFlash written sucessfully from file %s\r\n", argv[1]);
+        show_elapsed();
+        free(filebf);
+    }
+    else{
+        usage();
+    }
+  
+    libusb_close(ctx.hdl);
+    libusb_exit(NULL);
+    return 0;
 }
