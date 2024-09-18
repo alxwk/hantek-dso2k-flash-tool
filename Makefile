@@ -1,81 +1,160 @@
-# SPDX-License-Identifier: MIT
-# Copyright 2022-2024 DavidAlfa
-# Copyright 2007-2022 Jianjun Jiang <8192542@qq.com>
+# SPDX-License-Identifier:  MIT
+# Copyright 2023-2024 Jorengarenar
+# Makefile dialect: GNU
 
-#
-# Top makefile
-#
+# ~ ----------------------------------------------------------------------- {{{1
 
-CROSS		?=
+.PHONY: regular dev debug build clean stderr scan-build compile_commands.json
 
-AS			:= $(CROSS)gcc -x assembler-with-cpp
-CC			:= $(CROSS)gcc
-CXX			:= $(CROSS)g++
-LD			:= $(CROSS)ld
-AR			:= $(CROSS)ar
-OC			:= $(CROSS)objcopy
-OD			:= $(CROSS)objdump
-RM			:= rm -fr
+cache_build = @ echo "$@:" > $(BUILD)/.target
 
-ASFLAGS		:= -g -ggdb -Wall -O2
-CFLAGS		:= -g -ggdb -Wall -O2
-CXXFLAGS	:= -g -ggdb -Wall -O2
-LDFLAGS		:=
-ARFLAGS		:= -rcs
-OCFLAGS		:= -v -O binary
-ODFLAGS		:=
-MCFLAGS		:=
+# VARS -------------------------------------------------------------------- {{{1
 
-LIBDIRS		:=
-LIBS 		:= `pkg-config --libs libusb-1.0`
+EXE := dsoflash
 
-INCDIRS		:= -I . `pkg-config --cflags libusb-1.0`
-SRCDIRS		:= . chips
+SRCDIR   := src
+BUILD    := build
+OBJDIR   := $(BUILD)/obj
+BINDIR   := $(BUILD)/bin
+DEPSDIR  := $(BUILD)/deps
+DUMPDIR  := $(BUILD)/dump
+
+LIBS := libusb-1.0
+
+CFLAGS   := -I$(SRCDIR)
+CPPFLAGS :=
+
+LDFLAGS  :=
+LDLIBS   :=
+
+SANS := address bounds leak signed-integer-overflow undefined unreachable
+
+SRCS := $(wildcard $(SRCDIR)/*.c)
+OBJS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
+
+ifneq ($(LIBS),)
+	CFLAGS   += $(shell pkg-config --cflags-only-other $(LIBS))
+	CPPFLAGS += $(shell pkg-config --cflags-only-I $(LIBS))
+	LDFLAGS  += $(shell pkg-config --libs-only-L $(LIBS))
+	LDLIBS   += $(shell pkg-config --libs-only-l $(LIBS))
+endif
+
+# BUILDS ------------------------------------------------------------------ {{{1
+
+-include $(BUILD)/.target
 
 
-SFILES		:= $(foreach dir, $(SRCDIRS), $(wildcard $(dir)/*.S))
-CFILES		:= $(foreach dir, $(SRCDIRS), $(wildcard $(dir)/*.c))
-CPPFILES	:= $(foreach dir, $(SRCDIRS), $(wildcard $(dir)/*.cpp))
+regular: CFLAGS += -O2 -flto -DNDEBUG
+regular: LDFLAGS += -s -flto
+regular: build
+	$(cache_build)
 
-SDEPS		:= $(patsubst %, %, $(SFILES:.S=.o.d))
-CDEPS		:= $(patsubst %, %, $(CFILES:.c=.o.d))
-CPPDEPS		:= $(patsubst %, %, $(CPPFILES:.cpp=.o.d))
-DEPS		:= $(SDEPS) $(CDEPS) $(CPPDEPS)
 
-SOBJS		:= $(patsubst %, %, $(SFILES:.S=.o))
-COBJS		:= $(patsubst %, %, $(CFILES:.c=.o))
-CPPOBJS		:= $(patsubst %, %, $(CPPFILES:.cpp=.o))
-OBJS		:= $(SOBJS) $(COBJS) $(CPPOBJS)
+native: CFLAGS += -march=native -mtune=native
+native: regular
+	$(cache_build)
 
-OBJDIRS		:= $(patsubst %, %, $(SRCDIRS))
-NAME		:= dsoflash
-VPATH		:= $(OBJDIRS)
 
-.PHONY:		all install clean
+dev: CFLAGS += \
+	-O3 -flto \
+	-march=native -mtune=native
+dev: CFLAGS += \
+	-Wall -Wextra \
+	-fanalyzer
+dev: CFLAGS += \
+	-pedantic # -pedantic-errors
+dev: CFLAGS += \
+	-Wcast-qual \
+	-Wcast-align \
+	-Wdouble-promotion \
+	-Wuseless-cast
+dev: CFLAGS += \
+	-Wlogical-op \
+	-Wfloat-equal
+dev: CFLAGS += \
+	-Wformat=2 \
+	-Wwrite-strings
+dev: CFLAGS += \
+	-Winline \
+	-Wmissing-prototypes \
+	-Wstrict-prototypes \
+	-Wold-style-definition \
+	-Werror=implicit-function-declaration \
+	-Werror=return-type
+dev: CFLAGS += \
+	-Wshadow \
+	-Wnested-externs \
+	-Werror=init-self
+dev: CFLAGS += \
+	-Wnull-dereference \
+	-Wchar-subscripts \
+	-Wsequence-point \
+	-Wpointer-arith
+dev: CFLAGS += \
+	-Wduplicated-cond \
+	-Wduplicated-branches
+dev: CFLAGS += \
+	-Walloca \
+	-Werror=vla-larger-than=0
+dev: CFLAGS += \
+	-Werror=parentheses \
+	-Werror=missing-braces \
+	-Werror=misleading-indentation
+dev: CFLAGS += \
+	-g \
+	-fno-omit-frame-pointer \
+	-fsanitize=$(subst $(eval) ,$(shell echo ","),$(SANS))
+dev: build
+	$(cache_build)
 
-all : $(NAME)
 
-$(NAME) : $(OBJS)
-	@echo [LD] Linking $@
-	@$(CC) $(LDFLAGS) $(LIBDIRS) $^ -o $@ $(LIBS)
+debug: CFLAGS += \
+	-Og \
+	-g3 -ggdb3
+debug: CFLAGS += \
+	-masm=intel -fverbose-asm \
+	-save-temps -dumpbase $(DUMPDIR)/$(*F)
+debug: build
+	$(cache_build)
 
-$(SOBJS) : %.o : %.S
-	@echo [AS] $<
-	@$(AS) $(ASFLAGS) -MD -MP -MF $@.d $(INCDIRS) -c $< -o $@
 
-$(COBJS) : %.o : %.c
-	@echo [CC] $<
-	@$(CC) $(CFLAGS) -MD -MP -MF $@.d $(INCDIRS) -c $< -o $@
+build: $(BINDIR)/$(EXE)
 
-$(CPPOBJS) : %.o : %.cpp
-	@echo [CXX] $<
-	@$(CXX) $(CXXFLAGS) -MD -MP -MF $@.d $(INCDIRS) -c $< -o $@
 
-install:
-	install -Dm0755 dsoflash /usr/local/bin/dsoflash
-	install -Dm0644 99-dsoflash.rules /etc/udev/rules.d/99-dsoflash.rules
-	install -Dm0644 LICENSE /usr/share/licenses/dsoflash/LICENSE
-	udevadm control --reload
+# RULES ------------------------------------------------------------------- {{{1
+
+$(BINDIR)/%: $(OBJS)
+	@mkdir -p $(BINDIR)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.c
+	@mkdir -p $(OBJDIR)
+	@mkdir -p $(DUMPDIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
+
+$(DEPSDIR)/%.o.d: $(SRCDIR)/%.c
+	@mkdir -p $(DEPSDIR)
+	@ $(CC) $(CPPFLAGS) -M $< -MT $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $<) > $@
+
+-include $(patsubst $(OBJDIR)/%.o, $(DEPSDIR)/%.d, $(OBJS))
+
+# MISC -------------------------------------------------------------------- {{{1
 
 clean:
-	@$(RM) $(DEPS) $(OBJS) $(NAME).exe $(NAME) *~
+	@ [ "$(CURDIR)" != "$(abspath $(BUILD))" ]
+	$(RM) -r $(BUILD)
+
+stderr:
+	$(MAKE) $(filter-out $@,$(MAKECMDGOALS)) 2> $(BUILD)/stderr.log
+	@ false
+
+scan-build:
+	@mkdir -p $(BUILD)/scan-build
+	scan-build -o $(BUILD)/scan-build $(MAKE) $(filter-out $@,$(MAKECMDGOALS))
+
+compile_commands.json:
+	@ $(MAKE) --always-make --dry-run dev \
+		| grep -wE -e '$(CC)' \
+		| grep -w -e '\-c' -e '\-x' \
+		| jq -nR '[inputs|{command:., directory:"'$$PWD'", file: match("(?<=-c )\\S+").string}]' \
+		> compile_commands.json
