@@ -27,9 +27,9 @@ ODFLAGS		:=
 MCFLAGS		:=
 
 LIBDIRS		:=
-LIBS 		:= -L". /usr/local/lib /usr/i686-w64-mingw32/lib" -lusb-1.0
+LIBS 		:= `pkg-config --libs libusb-1.0`
 
-INCDIRS		:= -I". /usr/include/libusb-1.0 /usr/i686-w64-mingw32/include/libusb-1.0"
+INCDIRS		:= -I . `pkg-config --cflags libusb-1.0`
 SRCDIRS		:= . chips
 
 
