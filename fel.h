@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright 2007-2022 Jianjun Jiang <8192542@qq.com>
+ */
+
 #ifndef __FEL_H__
 #define __FEL_H__
 

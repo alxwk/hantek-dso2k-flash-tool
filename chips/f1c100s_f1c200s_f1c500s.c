@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright 2022-2024 DavidAlfa
+ * Copyright 2007-2022 Jianjun Jiang <8192542@qq.com>
+ */
+
 #include <fel.h>
 
 #define SDRAM_ADDR          (0x80000000UL)              // SDRAM base address

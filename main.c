@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright 2022-2024 DavidAlfa
+ */
+
 #include <fel.h>
 #include <spinand.h>
 #include <md5.h>

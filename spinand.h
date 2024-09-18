@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright 2022-2024 DavidAlfa
+ * Copyright 2007-2022 Jianjun Jiang <8192542@qq.com>
+ */
+
 #ifndef __SPINAND_H__
 #define __SPINAND_H__
 

@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright 2022-2024 DavidAlfa
+ * Copyright 2007-2022 Jianjun Jiang <8192542@qq.com>
+ */
+
 #include <spinand.h>
 
 #define SPINAND_ID(...)    { .val = { __VA_ARGS__ }, .len = sizeof((uint8_t[]){ __VA_ARGS__ }) }
