@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT
+ * Copyright 2024      Jorenar
  * Copyright 2022-2024 DavidAlfa
  */
 
@@ -10,7 +11,8 @@
 
 static struct xfel_ctx_t ctx;
 static char Name[128];
-static size_t capacity, read_bytes; 
+static size_t capacity;
+static uint32_t read_bytes;
 static char *flashbf, *filebf;
 static char filename[128];           
 static char ext[16];
@@ -81,7 +83,7 @@ static int init_system(void){
     int init=0;
     
     printf("\r\nConfiguring USB to HS mode... ");
-    ctx.chip->write32(&ctx, 0x01c13040, 0x29860);    
+    fel_write32(&ctx, 0x01c13040, 0x29860);
     libusb_close(ctx.hdl);                                                  // Close USB
     
     for(int i=0; i<10; i++){                                                 // Try for 10 seconds
