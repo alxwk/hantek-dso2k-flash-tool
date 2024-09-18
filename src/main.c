@@ -3,10 +3,12 @@
  * Copyright 2022-2024 DavidAlfa
  */
 
-#include <fel.h>
-#include <spinand.h>
-#include <md5.h>
 #include <time.h>
+
+#include <fel.h>
+
+#include "spinand.h"
+#include "md5.h"
 
 
 static struct xfel_ctx_t ctx;

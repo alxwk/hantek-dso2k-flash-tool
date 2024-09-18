@@ -1,0 +1,3 @@
+[submodule "extern/xfel"]
+	path = extern/xfel
+	url = https://github.com/xboot/xfel.git

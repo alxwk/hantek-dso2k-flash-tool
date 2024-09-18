@@ -14,6 +14,7 @@ EXE := dsoflash
 
 SRCDIR   := src
 BUILD    := build
+EXTERN   := extern
 OBJDIR   := $(BUILD)/obj
 BINDIR   := $(BUILD)/bin
 DEPSDIR  := $(BUILD)/deps
@@ -21,7 +22,7 @@ DUMPDIR  := $(BUILD)/dump
 
 LIBS := libusb-1.0
 
-CFLAGS   := -I$(SRCDIR)
+CFLAGS   := -I$(EXTERN)/xfel
 CPPFLAGS :=
 
 LDFLAGS  :=
