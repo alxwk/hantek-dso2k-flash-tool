@@ -17,4 +17,4 @@ dsoflash read <file>                             - Read spi contents into a file
 dsoflash write <file>                            - Write file to spi flash  (Erase not required)
 ```
 
-DSOflash was derived from xfel.
+DSOflash was derived from [xboot/xfel](https://github.com/xboot/xfel).
