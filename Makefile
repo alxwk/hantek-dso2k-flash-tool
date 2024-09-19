@@ -22,8 +22,10 @@ DUMPDIR  := $(BUILD)/dump
 
 LIBS := libusb-1.0
 
-CFLAGS   := -I$(EXTERN)/xfel
-CPPFLAGS :=
+XFEL := $(EXTERN)/xfel
+
+CFLAGS   :=
+CPPFLAGS := -I$(XFEL)
 
 LDFLAGS  :=
 LDLIBS   :=
@@ -31,7 +33,12 @@ LDLIBS   :=
 SANS := address bounds leak signed-integer-overflow undefined unreachable
 
 SRCS := $(wildcard $(SRCDIR)/*.c)
-OBJS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
+SRCS += $(XFEL)/fel.c
+SRCS += $(XFEL)/progress.c
+
+OBJS := $(SRCS)
+OBJS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/dsoflash/%.o, $(OBJS))
+OBJS := $(patsubst $(XFEL)/%.c, $(OBJDIR)/xfel/%.o, $(OBJS))
 
 ifneq ($(LIBS),)
 	CFLAGS   += $(shell pkg-config --cflags-only-other $(LIBS))
@@ -128,10 +135,10 @@ $(BINDIR)/%: $(OBJS)
 	@mkdir -p $(BINDIR)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.c
-	@mkdir -p $(OBJDIR)
+$(OBJDIR)/%.o: $(SRCS)
+	@mkdir -p "$$(dirname $@)"
 	@mkdir -p $(DUMPDIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $(filter %/$(notdir $(@:.o=.c)),$(SRCS))
 
 $(DEPSDIR)/%.o.d: $(SRCDIR)/%.c
 	@mkdir -p $(DEPSDIR)
