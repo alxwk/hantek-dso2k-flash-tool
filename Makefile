@@ -47,6 +47,8 @@ ifneq ($(LIBS),)
 	LDLIBS   += $(shell pkg-config --libs-only-l $(LIBS))
 endif
 
+XFEL_CFLAGS := $(CFLAGS) -O2 -flto -DNDEBUG
+
 # BUILDS ------------------------------------------------------------------ {{{1
 
 -include $(BUILD)/.target
@@ -135,10 +137,15 @@ $(BINDIR)/%: $(OBJS)
 	@mkdir -p $(BINDIR)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
-$(OBJDIR)/%.o: $(SRCS)
-	@mkdir -p "$$(dirname $@)"
+$(OBJDIR)/xfel/%.o: $(XFEL)/%.c
+	@mkdir -p $(OBJDIR)/xfel
 	@mkdir -p $(DUMPDIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $(filter %/$(notdir $(@:.o=.c)),$(SRCS))
+	$(CC) $(CPPFLAGS) $(XFEL_CFLAGS) -o $@ -c $<
+
+$(OBJDIR)/dsoflash/%.o: $(SRCDIR)/%.c
+	@mkdir -p $(OBJDIR)/dsoflash
+	@mkdir -p $(DUMPDIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
 
 $(DEPSDIR)/%.o.d: $(SRCDIR)/%.c
 	@mkdir -p $(DEPSDIR)
