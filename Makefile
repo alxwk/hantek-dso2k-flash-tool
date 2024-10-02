@@ -24,7 +24,7 @@ LIBS := libusb-1.0
 
 XFEL := $(EXTERN)/xfel
 
-CFLAGS   :=
+CFLAGS   := -std=gnu99
 CPPFLAGS := -I$(XFEL)
 
 LDFLAGS  :=
@@ -61,6 +61,7 @@ regular: build
 
 
 native: CFLAGS += -march=native -mtune=native
+native: XFEL_CFLAGS = $(CFLAGS)
 native: regular
 	$(cache_build)
 
@@ -124,6 +125,7 @@ debug: CFLAGS += \
 debug: CFLAGS += \
 	-masm=intel -fverbose-asm \
 	-save-temps -dumpbase $(DUMPDIR)/$(*F)
+debug: XFEL_CFLAGS = $(CFLAGS)
 debug: build
 	$(cache_build)
 
@@ -160,6 +162,7 @@ clean:
 	$(RM) -r $(BUILD)
 
 stderr:
+	@mkdir -p $(BUILD)
 	$(MAKE) $(filter-out $@,$(MAKECMDGOALS)) 2> $(BUILD)/stderr.log
 	@ false
 
