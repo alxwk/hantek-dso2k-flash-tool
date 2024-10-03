@@ -253,80 +253,89 @@ static inline int spinand_wait_for_busy(struct xfel_ctx_t *ctx, struct spinand_p
 
 static int spinand_helper_init(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat, int unlock)
 {
+    if (!(fel_spi_init(ctx, &pdat->swapbuf, &pdat->swaplen, &pdat->cmdlen) && spinand_info(ctx, pdat))) {
+        return 0;
+    }
+
+    spinand_reset(ctx, pdat);
+    spinand_wait_for_busy(ctx, pdat);
+
     uint8_t val;
-    if (fel_spi_init(ctx, &pdat->swapbuf, &pdat->swaplen, &pdat->cmdlen) && spinand_info(ctx, pdat)) {
-        spinand_reset(ctx, pdat);
-        spinand_wait_for_busy(ctx, pdat);
-        if (unlock) {
-            if (spinand_get_feature(ctx, pdat, OPCODE_FEATURE_PROTECT, &val) ) {          // Read Status-1 register
-                if (val != 0) {
-                    spinand_wait_for_busy(ctx, pdat);
-                    if (!spinand_set_feature(ctx, pdat, OPCODE_FEATURE_PROTECT, 0)) {
-                        printf("Error while modifying Status-1 register!r\n");
-                        return 0;
-                    } else {
-                        spinand_wait_for_busy(ctx, pdat);
-                        if (spinand_get_feature(ctx, pdat, OPCODE_FEATURE_PROTECT, &val) ) {
-                            if (val != 0) {
-                                printf("Unable to modify disable Status-1 register!\n");
-                                return 0;
-                            }
-                        } else {
-                            printf("Error reading Status-1 register!\n");
-                            return 0;
-                        }
-                    }
-                }
-            } else {
+
+    if (unlock) {
+        // Read Status-1 register
+        if (!spinand_get_feature(ctx, pdat, OPCODE_FEATURE_PROTECT, &val)) {
+            printf("Error reading Status-1 register!\n");
+            return 0;
+        }
+
+        if (val != 0) {
+            spinand_wait_for_busy(ctx, pdat);
+            if (!spinand_set_feature(ctx, pdat, OPCODE_FEATURE_PROTECT, 0)) {
+                printf("Error while modifying Status-1 register!r\n");
+                return 0;
+            }
+
+            spinand_wait_for_busy(ctx, pdat);
+            if (!spinand_get_feature(ctx, pdat, OPCODE_FEATURE_PROTECT, &val)) {
                 printf("Error reading Status-1 register!\n");
                 return 0;
             }
-        }
-        spinand_wait_for_busy(ctx, pdat);
-        if (spinand_get_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, &val)) {           // Read Status-2 register
-            if ( (val & 0x10) != 0x10 ) {                                            // Check ECC-E=1
-                val |= 0x10;
-                spinand_wait_for_busy(ctx, pdat);
-                if (!spinand_set_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, val)) {   // Enable ECC
-                    printf("Error while modifying Status-2 register!\n");
-                    return 0;
-                } else {
-                    spinand_wait_for_busy(ctx, pdat);
-                    if (spinand_get_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, &val)) {
-                        if ( (val & 0x10) != 0x10 ) {
-                            printf("Unable modify Status-2 register!\n");
-                            return 0;
-                        }
-                    } else {
-                        printf("Error reading Status-2 register!\n");
-                        return 0;
-                    }
-                }
+
+            if (val != 0) {
+                printf("Unable to modify disable Status-1 register!\n");
+                return 0;
             }
-        } else {
+        }
+    }
+
+    spinand_wait_for_busy(ctx, pdat);
+    if (!spinand_get_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, &val)) { // Read Status-2 register
+        printf("Error reading Status-2 register!\n");
+        return 0;
+    }
+
+    if ((val & 0x10) != 0x10) { // Check ECC-E=1
+        val |= 0x10;
+
+        spinand_wait_for_busy(ctx, pdat);
+        if (!spinand_set_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, val)) {   // Enable ECC
+            printf("Error while modifying Status-2 register!\n");
+            return 0;
+        }
+
+        spinand_wait_for_busy(ctx, pdat);
+        if (!spinand_get_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, &val)) {
             printf("Error reading Status-2 register!\n");
             return 0;
         }
-        spinand_wait_for_busy(ctx, pdat);
-        return 1;
+
+        if ((val & 0x10) != 0x10) {
+            printf("Unable modify Status-2 register!\n");
+            return 0;
+        }
     }
-    return 0;
+
+    spinand_wait_for_busy(ctx, pdat);
+
+    return 1;
 }
 
 
 int spinand_detect(struct xfel_ctx_t *ctx, char *name, size_t *capacity)
 {
     struct spinand_pdata_t pdat;
-    if (spinand_helper_init(ctx, &pdat, 0)) {
-        if (name) {
-            strcpy(name, pdat.info.name);
-        }
-        if (capacity) {
-            *capacity = (size_t)pdat.info.page_size * pdat.info.pages_per_block * pdat.info.blocks_per_die * pdat.info.ndies;
-        }
-        return 1;
+    if (!spinand_helper_init(ctx, &pdat, 0)) {
+        return 0;
     }
-    return 0;
+
+    if (name) {
+        strcpy(name, pdat.info.name);
+    }
+    if (capacity) {
+        *capacity = (size_t)pdat.info.page_size * pdat.info.pages_per_block * pdat.info.blocks_per_die * pdat.info.ndies;
+    }
+    return 1;
 }
 
 int dso2d_erase(struct xfel_ctx_t *ctx)
@@ -598,26 +607,26 @@ int dso2d_dump_regs(struct xfel_ctx_t *ctx)
 
     const char *status_str[] = {
         "\n"                                                                                      // Gigadevice
-        "Status 1: 0x%02X\n"
-        "BRWD\tRES\tBP2\tBP1\tBP0\tINV\tCMP\tRES\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
-        "Status 2: 0x%02X\n"
-        "OTP-PRT\tOTP-EN\tRES\tECC-EN\tBPL\tRES\tRES\tQE\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
-        "Status 3: 0x%02X\n"
-        "RES\tRES\tECCS1\tECCS0\tP-FAIL\tE-FAIL\tWEL\tOIP\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n",
+            "Status 1: 0x%02X\n"
+            "BRWD\tRES\tBP2\tBP1\tBP0\tINV\tCMP\tRES\n"
+            "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+            "Status 2: 0x%02X\n"
+            "OTP-PRT\tOTP-EN\tRES\tECC-EN\tBPL\tRES\tRES\tQE\n"
+            "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+            "Status 3: 0x%02X\n"
+            "RES\tRES\tECCS1\tECCS0\tP-FAIL\tE-FAIL\tWEL\tOIP\n"
+            "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n",
 
         "\n"                                                                                      // Windbond
-        "Status 1: 0x%02X\n"
-        "SRP0\tBP3\tBP2\tBP1\tBP0\tTB\tWP-E\tSRP1\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
-        "Status 2: 0x%02X\n"
-        "OTP-L\tOTP-E\tSR1-L\tECC-E\tBUF\tRES\tRES\tRES\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
-        "Status 3: 0x%02X\n"
-        "RES\tLUT-F\tECC-1\tECC-0\tP-FAIL\tE-FAIL\tWEL\tBUSY\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n",
+            "Status 1: 0x%02X\n"
+            "SRP0\tBP3\tBP2\tBP1\tBP0\tTB\tWP-E\tSRP1\n"
+            "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+            "Status 2: 0x%02X\n"
+            "OTP-L\tOTP-E\tSR1-L\tECC-E\tBUF\tRES\tRES\tRES\n"
+            "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+            "Status 3: 0x%02X\n"
+            "RES\tLUT-F\tECC-1\tECC-0\tP-FAIL\tE-FAIL\tWEL\tBUSY\n"
+            "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n",
     };
 
     printf("\nDevice: '%s'\n", pdat.info.name);
