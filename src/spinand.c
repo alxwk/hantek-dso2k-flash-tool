@@ -404,13 +404,12 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
     }
 
     struct progress_t progress;
-    uint32_t block_size = RX_BLOCK_SIZE;                                // Read blocks of n pages
     uint32_t page = 0, pages = pdat.info.pages_per_block*pdat.info.blocks_per_die*pdat.info.ndies*pdat.info.planes_per_die;
     uint32_t page_size = pdat.info.page_size;
-    uint32_t read_size = block_size * page_size;
-    uint8_t cbuf[(RX_CMD_SZ*block_size) + 1];
+    uint32_t read_size = RX_BLOCK_SIZE * page_size;
+    uint8_t cbuf[(RX_CMD_SZ*RX_BLOCK_SIZE) + 1];
 
-    for (size_t i = 0; i < block_size; i++) { // Make a large cmd queue to reduce overhead
+    for (size_t i = 0; i < RX_BLOCK_SIZE; i++) { // Make a large cmd queue to reduce overhead
         uint8_t *d = &cbuf[RX_CMD_SZ*i];
 
         d[0] = SPI_CMD_SELECT;
@@ -439,7 +438,7 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
         d[27] = SPI_CMD_DESELECT;
     }
 
-    cbuf[RX_CMD_SZ*block_size] = SPI_CMD_END;
+    cbuf[RX_CMD_SZ*RX_BLOCK_SIZE] = SPI_CMD_END;
 
     if (sizeof (cbuf) > pdat.cmdlen ) {
         printf("cbuf: is too large for cmdbuf! %zu : %u\n", sizeof (cbuf), pdat.cmdlen);
@@ -450,7 +449,7 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
     progress_start(&progress, pages*page_size);
 
     while (page < pages) {
-        for (size_t i = 0; i < block_size; ++i) {
+        for (size_t i = 0; i < RX_BLOCK_SIZE; ++i) {
             uint8_t *d = &cbuf[RX_CMD_SZ*i];
             uint32_t p = page+i;
             uint32_t dst_addr = pdat.swapbuf+(i*page_size);
@@ -465,7 +464,7 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
         fel_chip_spi_run(ctx, cbuf, sizeof (cbuf));                      // Run Command buffer
         fel_read(ctx, pdat.swapbuf, buf, read_size);                    // Receive RX buffer
         buf += read_size;
-        page += block_size;
+        page += RX_BLOCK_SIZE;
         progress_update(&progress, read_size);
     }
     progress_stop(&progress);
@@ -474,28 +473,33 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
 
 int dso2d_restore(struct xfel_ctx_t *ctx, void *buf)
 {
+    int ret = 1;
+
     enum {
         TX_CMD_SZ     = 32U,
         TX_BLOCK_SIZE = 128U,
     };
 
-    struct spinand_pdata_t pdat;
+    if (!dso2d_erase(ctx)) {
+        return 0;
+    }
 
-    if (!dso2d_erase(ctx) || !spinand_helper_init(ctx, &pdat, 1)) {
+    struct spinand_pdata_t pdat;
+    if (!spinand_helper_init(ctx, &pdat, 1)) {
         return 0;
     }
 
     struct progress_t progress;
-    uint32_t block_size = TX_BLOCK_SIZE;                                // Write blocks of n pages
     uint32_t page = 0, pages = pdat.info.pages_per_block*pdat.info.blocks_per_die*pdat.info.ndies*pdat.info.planes_per_die;
     uint32_t page_size = pdat.info.page_size;
     uint32_t pages_to_write = 0;
-    uint8_t cbuf[(TX_CMD_SZ*block_size) + 1];                           // Make a large cmd queue to reduce overhead
-    uint8_t dbuf[block_size*page_size];
+    uint8_t cbuf[(TX_CMD_SZ*TX_BLOCK_SIZE) + 1];                           // Make a large cmd queue to reduce overhead
+    uint8_t *dbuf = malloc(TX_BLOCK_SIZE*page_size);
 
-    if (sizeof (cbuf) > pdat.cmdlen ) {
+    if ((sizeof cbuf) > pdat.cmdlen) {
         printf("cbuf is too large for cmdbuf! %zu : %u\n", sizeof (cbuf), pdat.cmdlen);
-        return 0;
+        ret = 0;
+        goto CLEANUP;
     }
 
     printf("\nWriting flash...\n");
@@ -548,7 +552,7 @@ int dso2d_restore(struct xfel_ctx_t *ctx, void *buf)
                 page++;                                                     // Increase current page
                 d += page_size;                                             // Increase input buffer
                 j = 0;
-                if (++i >= block_size) {
+                if (++i >= TX_BLOCK_SIZE) {
                     break;
                 }                                                           // Done with this page
             } else if (++j == page_size) {                                  // Increase scan, if reached end of page, it's empty, skip
@@ -565,7 +569,11 @@ int dso2d_restore(struct xfel_ctx_t *ctx, void *buf)
     }
 
     progress_stop(&progress);
-    return 1;
+
+CLEANUP:
+    free(dbuf);
+
+    return ret;
 }
 
 int dso2d_dump_regs(struct xfel_ctx_t *ctx)
