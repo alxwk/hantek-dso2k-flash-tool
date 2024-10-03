@@ -168,7 +168,7 @@ static const struct spinand_info_t spinand_infos[] = {
 };
 
 
-static inline int spinand_info(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat)
+static int spinand_info(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat)
 {
     uint8_t tx[2] = { [0] = OPCODE_RDID, [1] = 0x0 };
     uint8_t rx[4];
@@ -203,7 +203,7 @@ static inline int spinand_info(struct xfel_ctx_t *ctx, struct spinand_pdata_t *p
     return 0;
 }
 
-static inline int spinand_reset(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat)
+static int spinand_reset(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat)
 {
     uint8_t tx[1] = { OPCODE_RESET };
     if (!fel_spi_xfer(ctx, pdat->swapbuf, pdat->swaplen, pdat->cmdlen, tx, sizeof (tx), 0, 0)) {
@@ -213,7 +213,7 @@ static inline int spinand_reset(struct xfel_ctx_t *ctx, struct spinand_pdata_t *
     return 1;
 }
 
-static inline int spinand_get_feature(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat, uint8_t addr, uint8_t *val)
+static int spinand_get_feature(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat, uint8_t addr, uint8_t *val)
 {
     uint8_t tx[2] = { OPCODE_GET_FEATURE, addr };
     if (!fel_spi_xfer(ctx, pdat->swapbuf, pdat->swaplen, pdat->cmdlen, tx, sizeof (tx), val, 1)) {
@@ -222,7 +222,7 @@ static inline int spinand_get_feature(struct xfel_ctx_t *ctx, struct spinand_pda
     return 1;
 }
 
-static inline int spinand_set_feature(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat, uint8_t addr, uint8_t val)
+static int spinand_set_feature(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat, uint8_t addr, uint8_t val)
 {
     uint8_t tx[3] = {
         [0] = OPCODE_SET_FEATURE,
@@ -235,7 +235,7 @@ static inline int spinand_set_feature(struct xfel_ctx_t *ctx, struct spinand_pda
     return 1;
 }
 
-static inline int spinand_wait_for_busy(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat)
+static int spinand_wait_for_busy(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat)
 {
     uint8_t cbuf[256];
     uint32_t clen = 0;
