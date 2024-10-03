@@ -4,23 +4,16 @@
  * Copyright 2007-2022 Jianjun Jiang <8192542@qq.com>
  */
 
-#ifndef __SPINAND_H__
-#define __SPINAND_H__
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#ifndef SPINAND_H_
+#define SPINAND_H_
 
 #include <fel.h>
 
-int dso2d_dump(struct xfel_ctx_t *ctx, void *buf);
 int spinand_detect(struct xfel_ctx_t *ctx, char *name, size_t *capacity);
+
+int dso2d_dump(struct xfel_ctx_t *ctx, void *buf);
 int dso2d_restore(struct xfel_ctx_t *ctx, void *buf);
 int dso2d_erase(struct xfel_ctx_t *ctx);
 int dso2d_dump_regs(struct xfel_ctx_t *ctx);
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* __SPINAND_H__ */
+#endif // SPINAND_H_

@@ -4,13 +4,11 @@
  * Copyright 2007-2022 Jianjun Jiang <8192542@qq.com>
  */
 
-#include <spinand.h>
-
-#define SPINAND_ID(...)    { .val = { __VA_ARGS__ }, .len = sizeof ((uint8_t[]){ __VA_ARGS__ }) }
+#include "spinand.h"
 
 
 struct spinand_info_t {
-    char *name;
+    const char *name;
     struct {
         uint8_t val[4];
         uint8_t len;
@@ -31,22 +29,22 @@ struct spinand_pdata_t {
 };
 
 enum {
-    OPCODE_RDID                    = 0x9f,
-    OPCODE_GET_FEATURE            = 0x0f,
-    OPCODE_SET_FEATURE            = 0x1f,
-    OPCODE_FEATURE_PROTECT        = 0xa0,
-    OPCODE_FEATURE_CONFIG        = 0xb0,
-    OPCODE_FEATURE_STATUS        = 0xc0,
-    OPCODE_READ_PAGE_TO_CACHE    = 0x13,
-    OPCODE_FAST_READ            = 0x0B,
-    OPCODE_READ_PAGE_FROM_CACHE    = 0x03,
-    OPCODE_WRITE_ENABLE            = 0x06,
-    OPCODE_BLOCK_ERASE            = 0xd8,
-    OPCODE_PROGRAM_LOAD            = 0x02,
-    OPCODE_PROGRAM_EXEC            = 0x10,
+    OPCODE_RDID                 = 0x9f,
+    OPCODE_GET_FEATURE          = 0x0f,
+    OPCODE_SET_FEATURE          = 0x1f,
+    OPCODE_FEATURE_PROTECT      = 0xa0,
+    OPCODE_FEATURE_CONFIG       = 0xb0,
+    OPCODE_FEATURE_STATUS       = 0xc0,
+    OPCODE_READ_PAGE_TO_CACHE   = 0x13,
+    OPCODE_READ_PAGE_FROM_CACHE = 0x03,
+    OPCODE_WRITE_ENABLE         = 0x06,
+    OPCODE_BLOCK_ERASE          = 0xd8,
+    OPCODE_PROGRAM_LOAD         = 0x02,
+    OPCODE_PROGRAM_EXEC         = 0x10,
     OPCODE_RESET                = 0xff,
 };
 
+#define SPINAND_ID(...)  { .val = { __VA_ARGS__ }, .len = sizeof ((uint8_t[]){ __VA_ARGS__ }) }
 static const struct spinand_info_t spinand_infos[] = {
     /* Winbond */
     { "W25N512GV",       SPINAND_ID(0xef, 0xaa, 0x20), 2048,  64,  64,  512, 1, 1 },
@@ -172,35 +170,36 @@ static const struct spinand_info_t spinand_infos[] = {
 
 static inline int spinand_info(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat)
 {
-    const struct spinand_info_t *t;
-    uint8_t tx[2];
+    uint8_t tx[2] = { [0] = OPCODE_RDID, [1] = 0x0 };
     uint8_t rx[4];
-    int i;
 
-    tx[0] = OPCODE_RDID;
-    tx[1] = 0x0;
     if (!fel_spi_xfer(ctx, pdat->swapbuf, pdat->swaplen, pdat->cmdlen, tx, 2, rx, 4)) {
         return 0;
     }
-    for (i = 0; i < ARRAY_SIZE(spinand_infos); i++) {
+
+    const struct spinand_info_t *t;
+    for (size_t i = 0; i < ARRAY_SIZE(spinand_infos); i++) {
         t = &spinand_infos[i];
         if (memcmp(rx, t->id.val, t->id.len) == 0) {
-            memcpy(&pdat->info, t, sizeof (struct spinand_info_t));
+            memcpy(&pdat->info, t, sizeof pdat->info);
             return 1;
         }
     }
+
     tx[0] = OPCODE_RDID;
     if (!fel_spi_xfer(ctx, pdat->swapbuf, pdat->swaplen, pdat->cmdlen, tx, 1, rx, 4)) {
         return 0;
     }
-    for (i = 0; i < ARRAY_SIZE(spinand_infos); i++) {
+    for (size_t i = 0; i < ARRAY_SIZE(spinand_infos); i++) {
         t = &spinand_infos[i];
         if (memcmp(rx, t->id.val, t->id.len) == 0) {
-            memcpy(&pdat->info, t, sizeof (struct spinand_info_t));
+            memcpy(&pdat->info, t, sizeof pdat->info);
             return 1;
         }
     }
+
     printf("The spi nand flash '0x%02x%02x%02x%02x' is not yet supported\n", rx[0], rx[1], rx[2], rx[3]);
+
     return 0;
 }
 
@@ -225,11 +224,11 @@ static inline int spinand_get_feature(struct xfel_ctx_t *ctx, struct spinand_pda
 
 static inline int spinand_set_feature(struct xfel_ctx_t *ctx, struct spinand_pdata_t *pdat, uint8_t addr, uint8_t val)
 {
-    uint8_t tx[3];
-
-    tx[0] = OPCODE_SET_FEATURE;
-    tx[1] = addr;
-    tx[2] = val;
+    uint8_t tx[3] = {
+        [0] = OPCODE_SET_FEATURE,
+        [1] = addr,
+        [2] = val,
+    };
     if (!fel_spi_xfer(ctx, pdat->swapbuf, pdat->swaplen, pdat->cmdlen, tx, 3, 0, 0)) {
         return 0;
     }
@@ -314,6 +313,7 @@ static int spinand_helper_init(struct xfel_ctx_t *ctx, struct spinand_pdata_t *p
     return 0;
 }
 
+
 int spinand_detect(struct xfel_ctx_t *ctx, char *name, size_t *capacity)
 {
     struct spinand_pdata_t pdat;
@@ -329,15 +329,15 @@ int spinand_detect(struct xfel_ctx_t *ctx, char *name, size_t *capacity)
     return 0;
 }
 
-
-#define ERASE_CMD_SZ    (64U)
-
 int dso2d_erase(struct xfel_ctx_t *ctx)
 {
+    enum { ERASE_CMD_SZ  = 64U };
+
     struct progress_t p;
     struct spinand_pdata_t pdat;
     uint8_t cbuf[(ERASE_CMD_SZ*16)+1];
-    for (uint32_t i = 0; i < ERASE_CMD_SZ; i++) {                              // Make a large cmd queue to reduce overhead
+
+    for (size_t i = 0; i < ERASE_CMD_SZ; ++i) { // Make a large cmd queue to reduce overhead
         uint8_t *d = &cbuf[16*i];
         d[0]  = SPI_CMD_SELECT;                 // Write enable
         d[1]  = SPI_CMD_FAST;
@@ -365,10 +365,10 @@ int dso2d_erase(struct xfel_ctx_t *ctx)
     uint32_t pages, page = 0, n = pdat.info.page_size;
 
     printf("\nErasing flash...\n");
-    pages = pdat.info.pages_per_block*pdat.info.blocks_per_die*pdat.info.ndies*pdat.info.planes_per_die;
+    pages = pdat.info.pages_per_block * pdat.info.blocks_per_die * pdat.info.ndies * pdat.info.planes_per_die;
     progress_start(&p, pages*n);
     while (page < pages) {
-        for (uint32_t i = 0; i < ERASE_CMD_SZ; i++) {                              // Make a large cmd queue to reduce overhead
+        for (size_t i = 0; i < ERASE_CMD_SZ; i++) { // Make a large cmd queue to reduce overhead
             uint8_t *d = &cbuf[16*i];
             d[10] = (page>>8) & 0xFF;                              // Block address
             d[11] = (page>>0) & 0xFF;
@@ -381,26 +381,27 @@ int dso2d_erase(struct xfel_ctx_t *ctx)
     return 1;
 }
 
-
-#define RX_CMD_SZ       (28U)
-#define RX_BLOCK_SIZE   (128U)
-
 int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
 {
+    enum {
+        RX_CMD_SZ     = 28U,
+        RX_BLOCK_SIZE = 128U,
+    };
+
     struct spinand_pdata_t pdat;
 
     if (!spinand_helper_init(ctx, &pdat, 0)) {
         return 0;
     }
 
-    struct progress_t p;
+    struct progress_t progress;
     uint32_t block_size = RX_BLOCK_SIZE;                                // Read blocks of n pages
     uint32_t page = 0, pages = pdat.info.pages_per_block*pdat.info.blocks_per_die*pdat.info.ndies*pdat.info.planes_per_die;
     uint32_t page_size = pdat.info.page_size;
     uint32_t read_size = block_size * page_size;
     uint8_t cbuf[(RX_CMD_SZ*block_size) + 1];
 
-    for (uint32_t i = 0; i < block_size; i++) {                              // Make a large cmd queue to reduce overhead
+    for (size_t i = 0; i < block_size; i++) { // Make a large cmd queue to reduce overhead
         uint8_t *d = &cbuf[RX_CMD_SZ*i];
 
         d[0] = SPI_CMD_SELECT;
@@ -432,15 +433,15 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
     cbuf[RX_CMD_SZ*block_size] = SPI_CMD_END;
 
     if (sizeof (cbuf) > pdat.cmdlen ) {
-        printf("cbuf: is too large for cmdbuf! %u : %u\n", sizeof (cbuf), pdat.cmdlen);
+        printf("cbuf: is too large for cmdbuf! %zu : %u\n", sizeof (cbuf), pdat.cmdlen);
         return 0;
     }
 
     printf("Reading flash...\n");
-    progress_start(&p, pages*page_size);
+    progress_start(&progress, pages*page_size);
 
     while (page < pages) {
-        for (uint32_t i = 0; i < block_size; i++) {
+        for (size_t i = 0; i < block_size; ++i) {
             uint8_t *d = &cbuf[RX_CMD_SZ*i];
             uint32_t p = page+i;
             uint32_t dst_addr = pdat.swapbuf+(i*page_size);
@@ -456,25 +457,26 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
         fel_read(ctx, pdat.swapbuf, buf, read_size);                    // Receive RX buffer
         buf += read_size;
         page += block_size;
-        progress_update(&p, read_size);
+        progress_update(&progress, read_size);
     }
-    progress_stop(&p);
+    progress_stop(&progress);
     return 1;
 }
 
-
-#define TX_CMD_SZ       (32U)
-#define TX_BLOCK_SIZE   (128U)
-
 int dso2d_restore(struct xfel_ctx_t *ctx, void *buf)
 {
+    enum {
+        TX_CMD_SZ     = 32U,
+        TX_BLOCK_SIZE = 128U,
+    };
+
     struct spinand_pdata_t pdat;
 
     if (!dso2d_erase(ctx) || !spinand_helper_init(ctx, &pdat, 1)) {
         return 0;
     }
 
-    struct progress_t p;
+    struct progress_t progress;
     uint32_t block_size = TX_BLOCK_SIZE;                                // Write blocks of n pages
     uint32_t page = 0, pages = pdat.info.pages_per_block*pdat.info.blocks_per_die*pdat.info.ndies*pdat.info.planes_per_die;
     uint32_t page_size = pdat.info.page_size;
@@ -483,12 +485,12 @@ int dso2d_restore(struct xfel_ctx_t *ctx, void *buf)
     uint8_t dbuf[block_size*page_size];
 
     if (sizeof (cbuf) > pdat.cmdlen ) {
-        printf("cbuf is too large for cmdbuf! %u : %u\n", sizeof (cbuf), pdat.cmdlen);
+        printf("cbuf is too large for cmdbuf! %zu : %u\n", sizeof (cbuf), pdat.cmdlen);
         return 0;
     }
 
     printf("\nWriting flash...\n");
-    progress_start(&p, pages*page_size);
+    progress_start(&progress, pages*page_size);
     uint32_t last_page = 0, i;
     uint8_t *d = buf;
     while (page < pages) {
@@ -549,19 +551,51 @@ int dso2d_restore(struct xfel_ctx_t *ctx, void *buf)
         cbuf[pages_to_write*TX_CMD_SZ] = SPI_CMD_END;                       // Finish cmd
         fel_write(ctx, pdat.swapbuf, dbuf, pages_to_write * page_size);     // Transfer TX buffer
         fel_chip_spi_run(ctx, cbuf, (TX_CMD_SZ*pages_to_write)+1);          // Run Command buffer
-        progress_update(&p, (page-last_page)*page_size);                    // Update progress
+        progress_update(&progress, (page-last_page)*page_size);                    // Update progress
         last_page = page;
     }
 
-    progress_stop(&p);
+    progress_stop(&progress);
     return 1;
 }
-
 
 int dso2d_dump_regs(struct xfel_ctx_t *ctx)
 {
     struct spinand_pdata_t pdat;
-    uint8_t s1,s2,s3;
+    if (!spinand_helper_init(ctx, &pdat, 0)) {
+        return 0;
+    }
+
+    uint8_t s1;
+    if (!spinand_get_feature(ctx, &pdat, OPCODE_FEATURE_PROTECT, &s1)) {
+        return 0;
+    }
+
+    uint8_t s2;
+    if (!spinand_get_feature(ctx, &pdat, OPCODE_FEATURE_CONFIG,  &s2)) {
+        return 0;
+    }
+
+    uint8_t s3;
+    if (!spinand_get_feature(ctx, &pdat, OPCODE_FEATURE_STATUS,  &s3)) {
+        return 0;
+    }
+
+    uint8_t dev;
+    switch (pdat.info.id.val[0]) {
+    case 0xC8:
+        dev = 0;
+        break;
+
+    case 0xEF:
+        dev = 1;
+        break;
+
+    default:
+        printf("\nDevice '%s' not implemented\n", pdat.info.name);
+        return 0;
+    }
+
     const char *status_str[] = {
         "\n"                                                                                      // Gigadevice
         "Status 1: 0x%02X\n"
@@ -586,33 +620,6 @@ int dso2d_dump_regs(struct xfel_ctx_t *ctx)
         "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n",
     };
 
-    if (!spinand_helper_init(ctx, &pdat, 0)) {
-        return 0;
-    }
-    if (!spinand_get_feature(ctx, &pdat, OPCODE_FEATURE_PROTECT, &s1)) {
-        return 0;
-    }
-    if (!spinand_get_feature(ctx, &pdat, OPCODE_FEATURE_CONFIG,  &s2)) {
-        return 0;
-    }
-    if (!spinand_get_feature(ctx, &pdat, OPCODE_FEATURE_STATUS,  &s3)) {
-        return 0;
-    }
-
-    uint8_t dev;
-    switch (pdat.info.id.val[0]) {
-    case 0xC8:
-        dev = 0;
-        break;
-
-    case 0xEF:
-        dev = 1;
-        break;
-
-    default:
-        printf("\nDevice '%s' not implemented\n", pdat.info.name);
-        return 0;
-    }
     printf("\nDevice: '%s'\n", pdat.info.name);
     printf(status_str[dev],
            s1, (s1&0x80)&&1, (s1&0x40)&&1, (s1&0x20)&&1, (s1&0x10)&&1, (s1&0x8)&&1, (s1&0x4)&&1, (s1&0x2)&&1, (s1&0x1)&&1,
