@@ -200,7 +200,7 @@ static inline int spinand_info(struct xfel_ctx_t *ctx, struct spinand_pdata_t *p
             return 1;
         }
     }
-    printf("The spi nand flash '0x%02x%02x%02x%02x' is not yet supported\r\n", rx[0], rx[1], rx[2], rx[3]);
+    printf("The spi nand flash '0x%02x%02x%02x%02x' is not yet supported\n", rx[0], rx[1], rx[2], rx[3]);
     return 0;
 }
 
@@ -269,17 +269,17 @@ static int spinand_helper_init(struct xfel_ctx_t *ctx, struct spinand_pdata_t *p
                         spinand_wait_for_busy(ctx, pdat);
                         if (spinand_get_feature(ctx, pdat, OPCODE_FEATURE_PROTECT, &val) ) {
                             if (val != 0) {
-                                printf("Unable to modify disable Status-1 register!\r\n");
+                                printf("Unable to modify disable Status-1 register!\n");
                                 return 0;
                             }
                         } else {
-                            printf("Error reading Status-1 register!\r\n");
+                            printf("Error reading Status-1 register!\n");
                             return 0;
                         }
                     }
                 }
             } else {
-                printf("Error reading Status-1 register!\r\n");
+                printf("Error reading Status-1 register!\n");
                 return 0;
             }
         }
@@ -289,23 +289,23 @@ static int spinand_helper_init(struct xfel_ctx_t *ctx, struct spinand_pdata_t *p
                 val |= 0x10;
                 spinand_wait_for_busy(ctx, pdat);
                 if (!spinand_set_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, val)) {   // Enable ECC
-                    printf("Error while modifying Status-2 register!\r\n");
+                    printf("Error while modifying Status-2 register!\n");
                     return 0;
                 } else {
                     spinand_wait_for_busy(ctx, pdat);
                     if (spinand_get_feature(ctx, pdat, OPCODE_FEATURE_CONFIG, &val)) {
                         if ( (val & 0x10) != 0x10 ) {
-                            printf("Unable modify Status-2 register!\r\n");
+                            printf("Unable modify Status-2 register!\n");
                             return 0;
                         }
                     } else {
-                        printf("Error reading Status-2 register!\r\n");
+                        printf("Error reading Status-2 register!\n");
                         return 0;
                     }
                 }
             }
         } else {
-            printf("Error reading Status-2 register!\r\n");
+            printf("Error reading Status-2 register!\n");
             return 0;
         }
         spinand_wait_for_busy(ctx, pdat);
@@ -364,7 +364,7 @@ int dso2d_erase(struct xfel_ctx_t *ctx)
 
     uint32_t pages, page = 0, n = pdat.info.page_size;
 
-    printf("\r\nErasing flash...\r\n");
+    printf("\nErasing flash...\n");
     pages = pdat.info.pages_per_block*pdat.info.blocks_per_die*pdat.info.ndies*pdat.info.planes_per_die;
     progress_start(&p, pages*n);
     while (page < pages) {
@@ -432,11 +432,11 @@ int dso2d_dump(struct xfel_ctx_t *ctx, void *buf)
     cbuf[RX_CMD_SZ*block_size] = SPI_CMD_END;
 
     if (sizeof (cbuf) > pdat.cmdlen ) {
-        printf("cbuf: is too large for cmdbuf! %u : %u\r\n", sizeof (cbuf), pdat.cmdlen);
+        printf("cbuf: is too large for cmdbuf! %u : %u\n", sizeof (cbuf), pdat.cmdlen);
         return 0;
     }
 
-    printf("Reading flash...\r\n");
+    printf("Reading flash...\n");
     progress_start(&p, pages*page_size);
 
     while (page < pages) {
@@ -483,11 +483,11 @@ int dso2d_restore(struct xfel_ctx_t *ctx, void *buf)
     uint8_t dbuf[block_size*page_size];
 
     if (sizeof (cbuf) > pdat.cmdlen ) {
-        printf("cbuf is too large for cmdbuf! %u : %u\r\n", sizeof (cbuf), pdat.cmdlen);
+        printf("cbuf is too large for cmdbuf! %u : %u\n", sizeof (cbuf), pdat.cmdlen);
         return 0;
     }
 
-    printf("\r\nWriting flash...\r\n");
+    printf("\nWriting flash...\n");
     progress_start(&p, pages*page_size);
     uint32_t last_page = 0, i;
     uint8_t *d = buf;
@@ -563,27 +563,27 @@ int dso2d_dump_regs(struct xfel_ctx_t *ctx)
     struct spinand_pdata_t pdat;
     uint8_t s1,s2,s3;
     const char *status_str[] = {
-        "\r\n"                                                                                      // Gigadevice
-        "Status 1: 0x%02X\r\n"
-        "BRWD\tRES\tBP2\tBP1\tBP0\tINV\tCMP\tRES\r\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\r\n\n"
-        "Status 2: 0x%02X\r\n"
-        "OTP-PRT\tOTP-EN\tRES\tECC-EN\tBPL\tRES\tRES\tQE\r\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\r\n\n"
-        "Status 3: 0x%02X\r\n"
-        "RES\tRES\tECCS1\tECCS0\tP-FAIL\tE-FAIL\tWEL\tOIP\r\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\r\n\n",
+        "\n"                                                                                      // Gigadevice
+        "Status 1: 0x%02X\n"
+        "BRWD\tRES\tBP2\tBP1\tBP0\tINV\tCMP\tRES\n"
+        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+        "Status 2: 0x%02X\n"
+        "OTP-PRT\tOTP-EN\tRES\tECC-EN\tBPL\tRES\tRES\tQE\n"
+        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+        "Status 3: 0x%02X\n"
+        "RES\tRES\tECCS1\tECCS0\tP-FAIL\tE-FAIL\tWEL\tOIP\n"
+        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n",
 
-        "\r\n"                                                                                      // Windbond
-        "Status 1: 0x%02X\r\n"
-        "SRP0\tBP3\tBP2\tBP1\tBP0\tTB\tWP-E\tSRP1\r\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\r\n\n"
-        "Status 2: 0x%02X\r\n"
-        "OTP-L\tOTP-E\tSR1-L\tECC-E\tBUF\tRES\tRES\tRES\r\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\r\n\n"
-        "Status 3: 0x%02X\r\n"
-        "RES\tLUT-F\tECC-1\tECC-0\tP-FAIL\tE-FAIL\tWEL\tBUSY\r\n"
-        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\r\n\n",
+        "\n"                                                                                      // Windbond
+        "Status 1: 0x%02X\n"
+        "SRP0\tBP3\tBP2\tBP1\tBP0\tTB\tWP-E\tSRP1\n"
+        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+        "Status 2: 0x%02X\n"
+        "OTP-L\tOTP-E\tSR1-L\tECC-E\tBUF\tRES\tRES\tRES\n"
+        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n"
+        "Status 3: 0x%02X\n"
+        "RES\tLUT-F\tECC-1\tECC-0\tP-FAIL\tE-FAIL\tWEL\tBUSY\n"
+        "%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n\n",
     };
 
     if (!spinand_helper_init(ctx, &pdat, 0)) {
@@ -610,10 +610,10 @@ int dso2d_dump_regs(struct xfel_ctx_t *ctx)
         break;
 
     default:
-        printf("\r\nDevice '%s' not implemented\r\n", pdat.info.name);
+        printf("\nDevice '%s' not implemented\n", pdat.info.name);
         return 0;
     }
-    printf("\r\nDevice: '%s'\r\n", pdat.info.name);
+    printf("\nDevice: '%s'\n", pdat.info.name);
     printf(status_str[dev],
            s1, (s1&0x80)&&1, (s1&0x40)&&1, (s1&0x20)&&1, (s1&0x10)&&1, (s1&0x8)&&1, (s1&0x4)&&1, (s1&0x2)&&1, (s1&0x1)&&1,
            s2, (s2&0x80)&&1, (s2&0x40)&&1, (s2&0x20)&&1, (s2&0x10)&&1, (s2&0x8)&&1, (s2&0x4)&&1, (s2&0x2)&&1, (s2&0x1)&&1,
