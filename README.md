@@ -2,7 +2,7 @@ Hantek DSO2000 Flash Tool
 =========================
 
 [![CodeFactor](https://www.codefactor.io/repository/github/jorenar/dso2k-flash-tool/badge)](https://www.codefactor.io/repository/github/jorenar/dso2k-flash-tool)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/b4e0426ebafe4ae58a1dd295a49018a9)](https://app.codacy.com/gh/Jorenar/dso2k-flash-tool/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/8e69adea5ec94007b5e98b96c2804643)](https://app.codacy.com/gh/Jorenar/dso2k-flash-tool/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Jorenar_dso2k-flash-tool&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Jorenar_dso2k-flash-tool)
 
 Flash tool for Hantek DSO2000 oscilloscopes (DSO2C10, DSO2C15, DSO2D10, DSO2D15)
