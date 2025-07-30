@@ -11,6 +11,9 @@
 #include "spinand.h"
 #include "md5.h"
 
+#define MUSB_POWER    0x01c13040
+#define MUSB_POWER_HSENAB   0x20
+#define MUSB_POWER_SUSPENDM 0x01
 
 static struct xfel_ctx_t ctx;
 static char Name[128];
@@ -101,7 +104,13 @@ static int init_system(void)
     int init = 0;
 
     printf("\nConfiguring USB to HS mode... ");
-    fel_write32(&ctx, 0x01c13040, 0x29860);
+
+    uint8_t reg_data;
+
+    fel_read(&ctx, MUSB_POWER, &reg_data, 1);
+    reg_data = (reg_data & ~MUSB_POWER_SUSPENDM) | MUSB_POWER_HSENAB;       // disable suspend and enable high speed
+    fel_write(&ctx, MUSB_POWER, &reg_data, 1);
+
     libusb_close(ctx.hdl);                                                  // Close USB
 
     for (int i = 0; i < 10; i++) {                                                // Try for 10 seconds
