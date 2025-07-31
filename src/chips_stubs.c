@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright 2025      Alex Volkov
+ * Copyright 2024      Jorenar
+ */
+
 #include <fel.h>
 
 /* empty stubs need a non-NULL chip->detect pointer, as it's called by fel_init

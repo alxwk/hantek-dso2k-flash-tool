@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT
+ * Copyright 2025      Alex Volkov
  * Copyright 2024      Jorenar
  * Copyright 2022-2024 DavidAlfa
  */
