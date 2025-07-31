@@ -80,7 +80,7 @@ static void * file_load(const char *filename, uint32_t *len)
 
 static void usage(void)
 {
-    printf("\nHantek DSO2D1x flash utility v0.36\n");
+    printf("\nHantek DSO2D1x flash utility v0.36.1\n");
     printf("Compiled: %s\n", __DATE__);
     printf("Based on xfel v1.2.6 - https://github.com/xboot/xfel\n");
     printf("Usage:\n");
